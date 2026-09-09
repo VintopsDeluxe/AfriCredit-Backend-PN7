@@ -1,9 +1,10 @@
-// src/server.js
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 
 import { supabase } from './config/db.js';
 import { redis } from './config/redis.js';
@@ -15,8 +16,6 @@ import { initCronJobs } from './jobs/cronScheduler.js';
 
 import apiRoutes from './routes/index.js';
 import paymentRoutes from './routes/repaymentRoutes.js';
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
@@ -67,8 +66,12 @@ const PORT = process.env.PORT || 5000;
 
 const start = async () => {
     try {
-        await redis.connect();
-        console.log('Redis connected successfully');
+        if (process.env.REDIS_URL) {
+            await redis.connect();
+            console.log('✅ Redis connected successfully');
+        } else {
+            console.warn('⚠️ REDIS_URL not found. Skipping Redis connection.');
+        }
 
         server.listen(PORT, () => {
             console.log(`AfriCredit Platform API running on port ${PORT}`);

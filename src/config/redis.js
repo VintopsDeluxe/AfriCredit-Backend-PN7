@@ -1,11 +1,12 @@
 // src/config/redis.js
 import { createClient } from 'redis';
 
+const redisUrl = process.env.REDIS_URL;
+
 export const redis = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379'
+    url: redisUrl
 });
 
-redis.on('error', (err) => console.error('Redis Client Error', err));
+redis.on('error', (err) => console.error('Redis Client Error:', err.message));
 
-// Alias both names so files importing either 'redis' or 'redisClient' will work
 export const redisClient = redis;
