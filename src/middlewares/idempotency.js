@@ -1,5 +1,5 @@
 // src/middlewares/idempotency.js
-import redisClient from '../utils/redisClient.js';
+import { redisClient } from '../config/redis.js';
 import { AppError } from '../utils/AppError.js';
 
 export const idempotency = () => {
@@ -38,3 +38,5 @@ export const idempotency = () => {
         }
     };
 };
+
+export default idempotency;
