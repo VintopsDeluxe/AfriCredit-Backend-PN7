@@ -1,7 +1,10 @@
-// src/config/redis.js
 import { createClient } from 'redis';
 
 const redisUrl = process.env.REDIS_URL;
+
+if (!redisUrl) {
+    throw new Error('❌ REDIS_URL environment variable is missing. Check your .env file or environment settings.');
+}
 
 export const redis = createClient({
     url: redisUrl

@@ -10,10 +10,8 @@ const checkDueLoansAndQueueReminders = async () => {
   try {
     console.log('⏰ Running daily loan due date checker...');
 
-    // Calculate target date (e.g., loans due tomorrow or today)
     const today = new Date().toISOString().split('T')[0];
 
-    // Fetch pending repayments due today or in the next 24 hours from Supabase
     const { data: dueRepayments, error } = await supabase
       .from('repayments')
       .select('amount, due_date, loans(user_id, users(email, phone_number, full_name))')
@@ -33,7 +31,6 @@ const checkDueLoansAndQueueReminders = async () => {
       const user = repayment.loans?.users;
       if (!user) continue;
 
-      // Add job to BullMQ queue
       await loanReminderQueue.add('send-reminder', {
         email: user.email,
         phone: user.phone_number,
@@ -43,7 +40,7 @@ const checkDueLoansAndQueueReminders = async () => {
       });
     }
   } catch (err) {
-    console.error(' Cron job error while scanning due loans:', err.message);
+    console.error('❌ Cron job error while scanning due loans:', err.message);
   }
 };
 
@@ -51,8 +48,6 @@ const checkDueLoansAndQueueReminders = async () => {
  * Initialize Cron Schedules
  */
 export const initCronJobs = () => {
-  // Schedule to run every day at 8:00 AM ('0 8 * * *')
-  // For testing right now, you can use '* * * * *' (every minute)
   cron.schedule('0 8 * * *', () => {
     checkDueLoansAndQueueReminders();
   });
