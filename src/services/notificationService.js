@@ -1,15 +1,54 @@
 // src/services/notificationService.js
+import nodemailer from 'nodemailer';
+
+// Configure Mailtrap transporter for email notifications
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
+    port: process.env.SMTP_PORT || 2525,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
 
 /**
- * Send SMS notification (Supports Termii / Twilio or Console fallback)
+ * Send SMS notification using Twilio (with Termii and Console fallback options)
  */
 export const sendSMS = async (phoneNumber, message) => {
   try {
     if (!phoneNumber) return;
 
-    // Production Integration Plug (Termii / Twilio)
+    // Twilio Integration via Fetch
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          To: phoneNumber,
+          From: process.env.TWILIO_PHONE_NUMBER,
+          Body: message,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Failed to send SMS via Twilio');
+      }
+
+      console.log(`📱 [TWILIO SMS DISPATCHED] To: ${phoneNumber}`);
+      return;
+    }
+
+    // Fallback to Termii if configured
     if (process.env.TERMII_API_KEY) {
-      // Example Termii fetch call
       await fetch('https://api.ng.termii.com/api/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -22,22 +61,34 @@ export const sendSMS = async (phoneNumber, message) => {
           api_key: process.env.TERMII_API_KEY,
         }),
       });
+      console.log(`📱 [TERMII SMS DISPATCHED] To: ${phoneNumber}`);
+      return;
     }
 
-    console.log(`📱 [SMS DISPATCHED] To: ${phoneNumber} | Message: "${message}"`);
+    console.log(`📱 [SMS CONSOLE FALLBACK] To: ${phoneNumber} | Message: "${message}"`);
   } catch (error) {
     console.error('❌ SMS Notification Error:', error.message);
+    console.log(`👉 [DEV Fallback OTP] Message for ${phoneNumber}: "${message}"`);
   }
 };
 
 /**
- * Send Email notification (Supports SendGrid / Resend / Nodemailer or Console fallback)
+ * Send Email notification using Mailtrap / Nodemailer
  */
 export const sendEmail = async (email, subject, body) => {
   try {
     if (!email) return;
 
-    console.log(`📧 [EMAIL DISPATCHED] To: ${email} | Subject: "${subject}"`);
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"AfriCredit Platform" <noreply@africredit.com>',
+      to: email,
+      subject,
+      text: body,
+      html: `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;"><p>${body.replace(/\n/g, '<br/>')}</p></div>`,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`📧 [EMAIL DISPATCHED] To: ${email} | MessageId: ${info.messageId}`);
   } catch (error) {
     console.error('❌ Email Notification Error:', error.message);
   }

@@ -9,7 +9,7 @@ const router = express.Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register a new user account
+ *     summary: Register a new user account with phone number
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -18,24 +18,24 @@ const router = express.Router();
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - phone_number
  *               - password
  *             properties:
- *               email:
+ *               phone_number:
  *                 type: string
- *                 example: user@example.com
+ *                 example: "+2348012345678"
  *               password:
  *                 type: string
- *                 example: SecurePass123!
+ *                 example: "SecurePass123!"
  *               role:
  *                 type: string
  *                 enum: [borrower, risk_officer, admin]
- *                 example: borrower
+ *                 example: "borrower"
  *     responses:
  *       201:
  *         description: User registered successfully
  *       400:
- *         description: Email already in use or validation failure
+ *         description: Phone number already in use or validation failure
  *       429:
  *         description: Too many requests, rate limit exceeded
  *       500:
@@ -51,7 +51,7 @@ router.post(
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Authenticate user and return a JWT bearer token
+ *     summary: Authenticate user via phone number and return a JWT bearer token
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -60,20 +60,20 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - phone_number
  *               - password
  *             properties:
- *               email:
+ *               phone_number:
  *                 type: string
- *                 example: user@example.com
+ *                 example: "+2348012345678"
  *               password:
  *                 type: string
- *                 example: SecurePass123!
+ *                 example: "SecurePass123!"
  *     responses:
  *       200:
  *         description: Login successful
  *       401:
- *         description: Invalid email or password
+ *         description: Invalid phone number or password
  *       429:
  *         description: Too many requests, rate limit exceeded
  *       500:
@@ -89,7 +89,7 @@ router.post(
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Trigger password reset OTP generation and email dispatch
+ *     summary: Trigger password reset OTP generation and SMS dispatch
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -98,14 +98,14 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - phone_number
  *             properties:
- *               email:
+ *               phone_number:
  *                 type: string
- *                 example: user@example.com
+ *                 example: "+2348012345678"
  *     responses:
  *       200:
- *         description: Password reset OTP sent successfully
+ *         description: Password reset OTP sent to registered phone number
  *       429:
  *         description: Too many requests, rate limit exceeded
  *       500:
@@ -121,7 +121,7 @@ router.post(
  * @swagger
  * /auth/verify-otp:
  *   post:
- *     summary: Verify password reset or account verification OTP code
+ *     summary: Verify password reset OTP code via phone number
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -130,12 +130,12 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - phone_number
  *               - otp
  *             properties:
- *               email:
+ *               phone_number:
  *                 type: string
- *                 example: user@example.com
+ *                 example: "+2348012345678"
  *               otp:
  *                 type: string
  *                 example: "123456"

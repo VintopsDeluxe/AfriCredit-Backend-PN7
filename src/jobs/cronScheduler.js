@@ -1,6 +1,6 @@
 // src/jobs/cronScheduler.js
 import cron from 'node-cron';
-import { supabase } from '../config/db.js';
+import supabase from '../utils/supabaseClient.js';
 import { loanReminderQueue } from './reminderJob.js';
 
 /**

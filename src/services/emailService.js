@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
     port: process.env.SMTP_PORT || 2525,
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -44,23 +44,6 @@ export class EmailService {
             </div>
         `;
         const text = `Hello ${fullName}, Your KYC verification status is now ${status.toUpperCase()}.`;
-
-        return this.sendEmail({ to, subject, html, text });
-    }
-
-    static async sendLoanStatusEmail(to, fullName, loanStatus, amount) {
-        const subject = `AfriCredit: Loan Application ${loanStatus.toUpperCase()}`;
-        const html = `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                <h2>Hello ${fullName},</h2>
-                <p>Your loan application for <strong>₦${amount}</strong> has been <strong>${loanStatus}</strong>.</p>
-                <p>Log in to your AfriCredit mobile app to view more details.</p>
-                <br/>
-                <p>Best regards,</p>
-                <p><strong>The AfriCredit Team</strong></p>
-            </div>
-        `;
-        const text = `Hello ${fullName}, your loan application for ₦${amount} has been ${loanStatus}.`;
 
         return this.sendEmail({ to, subject, html, text });
     }
