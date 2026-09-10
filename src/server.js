@@ -29,6 +29,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'x-paystack-signature']
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(rateLimiter());
 
 // 2. Documentation & WebSockets
