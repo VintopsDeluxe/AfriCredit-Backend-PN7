@@ -13,13 +13,69 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * Send SMS notification using Twilio (with Termii and Console fallback options)
+ * Send SMS notification using Robase API as primary provider,
+ * with Termii, Twilio, and Console fallbacks.
  */
 export const sendSMS = async (phoneNumber, message) => {
   try {
     if (!phoneNumber) return;
 
-    // Twilio Integration via Fetch
+    // Standardize phone number in international format (+234...)
+    const formattedPhone = phoneNumber.startsWith('+') 
+      ? phoneNumber 
+      : `+${phoneNumber.replace(/^0/, '234')}`;
+
+    // 1. Primary: Robase API (https://api.robase.dev)
+    if (process.env.ROBASE_API_KEY) {
+      const response = await fetch('https://api.robase.dev/v1/sms/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.ROBASE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          phone_number: formattedPhone,
+          message: message,
+          sender_id: process.env.ROBASE_SENDER_ID || 'Robase',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log(`📱 [ROBASE SMS DISPATCHED] To: ${formattedPhone} | ID: ${data.id || data.message_id || 'N/A'}`);
+        return data;
+      }
+
+      console.warn('⚠️ [Robase Provider Warning]:', data);
+    }
+
+    // 2. Secondary Fallback: Termii Integration
+    if (process.env.TERMII_API_KEY) {
+      const termiiPhone = formattedPhone.startsWith('+') ? formattedPhone.slice(1) : formattedPhone;
+
+      const response = await fetch('https://api.ng.termii.com/api/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: termiiPhone,
+          from: process.env.TERMII_SENDER_ID || 'AfriCredit',
+          sms: message,
+          type: 'plain',
+          channel: 'dnd',
+          api_key: process.env.TERMII_API_KEY,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.code === 'ok') {
+        console.log(`📱 [TERMII SMS FALLBACK DISPATCHED] To: ${termiiPhone}`);
+        return data;
+      }
+    }
+
+    // 3. Tertiary Fallback: Twilio Integration
     if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
       const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -32,40 +88,20 @@ export const sendSMS = async (phoneNumber, message) => {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          To: phoneNumber,
+          To: formattedPhone,
           From: process.env.TWILIO_PHONE_NUMBER,
           Body: message,
         }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.message || 'Failed to send SMS via Twilio');
+      if (response.ok) {
+        console.log(`📱 [TWILIO SMS FALLBACK DISPATCHED] To: ${formattedPhone}`);
+        return;
       }
-
-      console.log(`📱 [TWILIO SMS DISPATCHED] To: ${phoneNumber}`);
-      return;
     }
 
-    // Fallback to Termii if configured
-    if (process.env.TERMII_API_KEY) {
-      await fetch('https://api.ng.termii.com/api/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: phoneNumber,
-          from: process.env.TERMII_SENDER_ID || 'AfriCredit',
-          sms: message,
-          type: 'plain',
-          channel: 'generic',
-          api_key: process.env.TERMII_API_KEY,
-        }),
-      });
-      console.log(`📱 [TERMII SMS DISPATCHED] To: ${phoneNumber}`);
-      return;
-    }
-
-    console.log(`📱 [SMS CONSOLE FALLBACK] To: ${phoneNumber} | Message: "${message}"`);
+    // 4. Dev Fallback: Console Output
+    console.log(`📱 [SMS CONSOLE FALLBACK] To: ${formattedPhone} | Message: "${message}"`);
   } catch (error) {
     console.error('❌ SMS Notification Error:', error.message);
     console.log(`👉 [DEV Fallback OTP] Message for ${phoneNumber}: "${message}"`);
