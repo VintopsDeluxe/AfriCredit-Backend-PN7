@@ -9,14 +9,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
 export class AuthController {
 
-    // 1. Register User with Phone Number
+    // 1. Initiate Registration (Send OTP to Phone Number)
     static async register(req, res, next) {
         try {
-            const { phone_number, password, role } = req.body;
-            if (!phone_number || !password) {
-                return next(new AppError('Phone number and password required', 400, true, 'MISSING_FIELDS'));
+            const { phone_number, role } = req.body;
+            if (!phone_number) {
+                return next(new AppError('Phone number is required', 400, true, 'MISSING_FIELDS'));
             }
 
+            // Check if phone number is already registered
             const { data: existingUser } = await supabase
                 .from('users')
                 .select('id')
@@ -27,31 +28,110 @@ export class AuthController {
                 return next(new AppError('Phone number already in use.', 400, true, 'PHONE_TAKEN'));
             }
 
-            const hashedPassword = await bcrypt.hash(password, 10);
-            const { data: newUser, error } = await supabase
-                .from('users')
-                .insert([{ 
-                    phone_number, 
-                    password_hash: hashedPassword, 
-                    role: role || 'borrower', 
-                    created_at: new Date().toISOString() 
-                }])
-                .select('id, phone_number, role')
-                .single();
+            // Generate 6-digit OTP and set expiration (15 mins)
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-            if (error) throw error;
+            // Clear any prior registration OTP attempts for this phone number
+            await supabase
+                .from('pending_registrations')
+                .delete()
+                .eq('phone_number', phone_number);
 
-            return res.status(201).json({
+            // Store temporary registration state
+            const { error: insertError } = await supabase
+                .from('pending_registrations')
+                .insert({
+                    phone_number,
+                    otp,
+                    role: role || 'borrower',
+                    expires_at: expiresAt
+                });
+
+            if (insertError) throw insertError;
+
+            // Dev Fallback Logging
+            console.log(`👉 [DEV Fallback OTP] Registration code for ${phone_number}: "${otp}"`);
+
+            // Send SMS
+            NotificationService.sendSMS(
+                phone_number,
+                `Your AfriCredit registration verification code is: ${otp}. Valid for 15 minutes.`
+            ).catch(err => console.error('Registration SMS failed:', err));
+
+            return res.status(200).json({
                 success: true,
-                message: 'User registered successfully.',
-                data: newUser
+                message: 'Verification OTP sent to phone number.'
             });
         } catch (err) {
             next(err);
         }
     }
 
-    // 2. Login User with Phone Number
+    // 2. Complete Registration (Verify OTP & Set Password)
+    static async verifyRegistration(req, res, next) {
+        try {
+            const { phone_number, otp, password } = req.body;
+            if (!phone_number || !otp || !password) {
+                return next(new AppError('Phone number, OTP, and password are required', 400, true, 'MISSING_FIELDS'));
+            }
+
+            // Fetch pending registration record
+            const { data: pendingRecord, error: pendingError } = await supabase
+                .from('pending_registrations')
+                .select('*')
+                .eq('phone_number', phone_number)
+                .eq('otp', otp)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (pendingError || !pendingRecord || new Date(pendingRecord.expires_at) < new Date()) {
+                return next(new AppError('Invalid or expired OTP code.', 400, true, 'INVALID_OTP'));
+            }
+
+            // Hash password and create final user
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const { data: newUser, error: createError } = await supabase
+                .from('users')
+                .insert([{
+                    phone_number: pendingRecord.phone_number,
+                    password_hash: hashedPassword,
+                    role: pendingRecord.role || 'borrower',
+                    created_at: new Date().toISOString()
+                }])
+                .select('id, phone_number, role')
+                .single();
+
+            if (createError) throw createError;
+
+            // Clear temporary registration record
+            await supabase
+                .from('pending_registrations')
+                .delete()
+                .eq('phone_number', phone_number);
+
+            // Optional: Generate JWT token immediately so user is logged in upon registration completion
+            const token = jwt.sign(
+                { id: newUser.id, phone_number: newUser.phone_number, role: newUser.role },
+                JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            return res.status(201).json({
+                success: true,
+                message: 'Account successfully registered and verified.',
+                data: {
+                    token,
+                    user: newUser
+                }
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    // 3. Login User with Phone Number
     static async login(req, res, next) {
         try {
             const { phone_number, password } = req.body;
@@ -93,7 +173,7 @@ export class AuthController {
         }
     }
 
-    // 3. Forgot Password (Generate & Send OTP via SMS)
+    // 4. Forgot Password (Generate & Send OTP via SMS)
     static async forgotPassword(req, res, next) {
         try {
             const { phone_number } = req.body;
@@ -117,7 +197,6 @@ export class AuthController {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-            // Clear old tokens first to prevent record collision/conflicts
             await supabase.from('password_resets').delete().eq('user_id', user.id);
 
             const { error: insertError } = await supabase
@@ -126,7 +205,6 @@ export class AuthController {
 
             if (insertError) throw insertError;
 
-            // Developer fallback logging for trial accounts or unconfigured SMS gateway
             console.log(`👉 [DEV Fallback OTP] Message for ${phone_number}: "Your AfriCredit password reset code is: ${otp}. Valid for 15 minutes."`);
 
             NotificationService.sendSMS(
@@ -143,7 +221,7 @@ export class AuthController {
         }
     }
 
-    // 4. Verify OTP Code via Phone Number
+    // 5. Verify OTP Code via Phone Number (For Password Reset)
     static async verifyOtp(req, res, next) {
         try {
             const { phone_number, otp } = req.body;
@@ -183,7 +261,7 @@ export class AuthController {
         }
     }
 
-    // 5. Reset Password (Complete Reset via Phone Number)
+    // 6. Reset Password (Complete Reset via Phone Number)
     static async resetPassword(req, res, next) {
         try {
             const { phone_number, otp, newPassword } = req.body;
@@ -227,7 +305,7 @@ export class AuthController {
         }
     }
 
-    // 6. Google OAuth Redirect
+    // 7. Google OAuth Redirect
     static async googleAuthRedirect(req, res, next) {
         try {
             return res.status(302).json({

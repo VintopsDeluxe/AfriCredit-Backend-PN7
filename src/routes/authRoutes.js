@@ -9,7 +9,7 @@ const router = express.Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Register a new user account with phone number
+ *     summary: Initiate user registration by requesting an OTP sent to phone number
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -19,23 +19,19 @@ const router = express.Router();
  *             type: object
  *             required:
  *               - phone_number
- *               - password
  *             properties:
  *               phone_number:
  *                 type: string
  *                 example: "+2348012345678"
- *               password:
- *                 type: string
- *                 example: "SecurePass123!"
  *               role:
  *                 type: string
  *                 enum: [borrower, risk_officer, admin]
  *                 example: "borrower"
  *     responses:
- *       201:
- *         description: User registered successfully
+ *       200:
+ *         description: Verification OTP sent to phone number
  *       400:
- *         description: Phone number already in use or validation failure
+ *         description: Phone number already in use or missing fields
  *       429:
  *         description: Too many requests, rate limit exceeded
  *       500:
@@ -45,6 +41,48 @@ router.post(
     '/register', 
     rateLimiter({ max: 20, message: 'Too many registration attempts. Please try again later.' }), 
     AuthController.register
+);
+
+/**
+ * @swagger
+ * /auth/verify-registration:
+ *   post:
+ *     summary: Complete user registration by verifying OTP and setting account password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phone_number
+ *               - otp
+ *               - password
+ *             properties:
+ *               phone_number:
+ *                 type: string
+ *                 example: "+2348012345678"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *               password:
+ *                 type: string
+ *                 example: "SecurePass123!"
+ *     responses:
+ *       201:
+ *         description: Account successfully registered and verified
+ *       400:
+ *         description: Invalid or expired OTP code, or missing required fields
+ *       429:
+ *         description: Too many requests, rate limit exceeded
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+    '/verify-registration',
+    rateLimiter({ max: 10, message: 'Too many registration verification attempts. Please try again later.' }),
+    AuthController.verifyRegistration
 );
 
 /**
